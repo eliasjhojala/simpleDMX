@@ -4,6 +4,8 @@ import processing.event.*;
 import processing.opengl.*; 
 
 import processing.serial.*; 
+import dmxP512.*; 
+import processing.serial.*; 
 
 import java.util.HashMap; 
 import java.util.ArrayList; 
@@ -16,39 +18,48 @@ import java.io.IOException;
 
 public class simpleDMX extends PApplet {
 
-/**
- * Simple Write. 
- * 
- * Check if the mouse is over a rectangle and writes the status to the serial port. 
- * This example works with the Wiring / Arduino program that follows below.
- */
-
+EnttecOutput enttecOutput;
 
 
 
 Serial myPort;  // Create object from Serial class
 int val;        // Data received from the serial port
 
+Slider[] sliders = new Slider[24];
+
 public void setup() 
 {
   
- 
-  // I know that the first port in the serial list on my mac
-  // is always my  FTDI adaptor, so I open Serial.list()[0].
-  // On Windows machines, this generally opens COM1.
-  // Open whatever port is the one you're using.
- // String portName = Serial.list()[0];
- // myPort = new Serial(this, portName, 9600);
-  
-  
   println(Serial.list());
+  for(int i = 0; i < sliders.length; i++) {
+    sliders[i] = new Slider();
+    
+  }
 }
 
 boolean keyReleased = true;
 int selected = 0;
+boolean setupDone = false;
 public void draw() {
-  
   background(0);
+  if(setupDone) {
+    for(int i = 0; i < sliders.length; i++) {
+      int ch = i + 1;
+      sliders[i].draw(new PVector(i*40+20, 10), ch);
+      if(enttecOutput != null) { enttecOutput.setChannel(ch, sliders[i].value); }
+    } 
+  }
+  else {
+    setupWindow();
+  }
+  if(enttecOutput != null) { enttecOutput.draw(); }
+
+}
+
+
+
+public void setupWindow() {
+    
   for(int i = 0; i < Serial.list().length; i++) {
     if(i == selected) fill(255, 0, 0); else fill(255);
     text(Serial.list()[i], 15, i*15+20);
@@ -61,7 +72,8 @@ public void draw() {
       selected = getReverse(selected, 0, Serial.list().length-1);
     }
     else if(key == ENTER) {
-      println(selected);
+      enttecOutput = new EnttecOutput(this, Serial.list()[selected]);
+      setupDone = true;
     }
     keyReleased = false;
   }
@@ -83,7 +95,102 @@ public int getReverse(int val, int lo, int hi) {
 }
 
 
-  public void settings() {  size(800, 800); }
+
+
+int[] DMXforOutput = new int[512];
+
+
+
+
+DmxP512 dmxOutput;
+
+class EnttecOutput {
+  String port;
+  int[] lastDMX;
+  int delayBetweenPackets = 1;
+  long lastPacketMillis;
+  
+  int DMXPRO_BAUDRATE=115000;
+  int universeSize=512;
+  
+  boolean inUse;
+  
+  EnttecOutput() {
+  }
+  
+  EnttecOutput(PApplet parent, String port) {
+    try {
+     this.port = port;
+     lastDMX = new int[DMXforOutput.length];
+     dmxOutput = new DmxP512(parent, universeSize, false);
+     dmxOutput.setupDmxPro(port, DMXPRO_BAUDRATE);
+     inUse = true;
+    }
+    catch (Exception e) {
+     e.printStackTrace();
+     inUse = false;
+    }
+  }
+  
+  
+  public void draw() {
+    if(inUse) { 
+        sendUniversum();
+    }
+  }
+  
+  public void sendUniversum() {
+    if(lastDMX.length != DMXforOutput.length) {
+      lastDMX = new int[DMXforOutput.length];
+    }
+    for(int i = 0; i < DMXforOutput.length; i++) {
+      int newVal = DMXforOutput[i];
+      if(newVal != lastDMX[i]) {
+        sendChannel(i, newVal);
+        lastDMX[i] = newVal;
+      }
+    }
+  }
+  
+  public void setChannel(int ch, int val) {
+    if(ch >= 0 && ch < DMXforOutput.length && val >= 0 && val <= 255) {
+      DMXforOutput[ch] = val;
+    }
+  }
+  
+  public void sendChannel(int ch, int val) {
+    dmxOutput.set(ch, val);
+    println("Sent dmx ch: " + str(ch) + " val: " + str(val));
+  }
+  
+
+}
+class Slider {
+  
+  Slider() {
+   
+  }
+  public void setup() {
+  }
+   int value = 0;
+  public void draw(PVector location, int number) {
+    
+    PVector size = new PVector(30, 100);
+    strokeWeight(2); stroke(100);
+    fill(255);
+    rect(location.x, location.y, size.x, size.y);
+    text(number, location.x, location.y+size.y+20);
+    text(value, location.x, location.y+size.y+20+20);
+    if(mousePressed && mouseX > location.x && mouseX < location.x+size.x && mouseY >= location.y && mouseY <= location.y + size.y) {
+      value = PApplet.parseInt(map(size.y-mouseY+location.y, 0, size.y, 0, 255));
+    }
+    stroke(150);
+    fill(100);
+    rect(location.x+1, -map(value, 0, 255, 0, size.y)+size.y+location.y, size.x-2, map(value, 0, 255, 0, size.y));
+    
+  }
+}
+  public void settings() {  size(1200, 800); }
   static public void main(String[] passedArgs) {
     String[] appletArgs = new String[] { "simpleDMX" };
     if (passedArgs != null) {
