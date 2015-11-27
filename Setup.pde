@@ -1,6 +1,6 @@
 
 void setupWindow() {
-    
+  translate(0, -selected*15);
   for(int i = 0; i < Serial.list().length; i++) {
     if(i == selected) fill(255, 0, 0); else fill(255);
     text(Serial.list()[i], 15, i*15+20);
